@@ -33,4 +33,15 @@ poll_interval: 1
 reply:
   enabled: true
   on_open: "🚪 Door opened."
-  on_fail: "⚠️ Couldn't reach the door relay." 
+  on_fail: "⚠️ Couldn't reach the door relay."
+
+# When an authorized sender texts the setup trigger word, reply with the
+# Shortcut link and send the Door contact card (vcard) so they can add it.
+# Matched case-insensitively anywhere in the message, like the open trigger.
+setup:
+  enabled: true
+  trigger_word: "setup"
+  message: "To open the door, add this Shortcut and save the Door contact card 👇"
+  shortcut_url: "https://www.icloud.com/shortcuts/74a72e0e1fcb4b6eb5520ae692a0347e"
+  # Path to the contact card, relative to this config file (or absolute).
+  vcard: "Door.vcf"
