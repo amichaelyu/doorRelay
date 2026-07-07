@@ -17,7 +17,9 @@ Usage:
 import os
 import re
 import sys
+import hmac
 import time
+import hashlib
 import sqlite3
 import logging
 import subprocess
@@ -53,7 +55,8 @@ def load_config(path):
         ),
         "host": relay.get("host", "192.168.0.67"),
         "port": int(relay.get("port", 81)),
-        "code": str(relay.get("code", "")),
+        # `secret` is the HMAC key (never sent); `code` kept as a fallback name.
+        "secret": str(relay.get("secret", relay.get("code", ""))),
         "poll_interval": float(cfg.get("poll_interval", 2)),
         "reply": cfg.get("reply") or {},
     }
@@ -110,20 +113,32 @@ NEW_MESSAGES_SQL = """
 """
 
 
-def trigger_door(host, port, code):
+def trigger_door(host, port, secret):
+    """HMAC challenge-response: the secret is never transmitted.
+
+        us  -> "HELLO"
+        esp -> "NONCE:<hex>"
+        us  -> "AUTH:" + HMAC-SHA256(secret, nonce)
+        esp -> "OK: relay on 5s" | "DENIED"
+    """
     url = f"ws://{host}:{port}/"
     log.info("Opening door via %s", url)
     try:
         ws = websocket.create_connection(url, timeout=5)
         try:
-            ws.send(code)
-            try:
-                log.info("Relay replied: %s", ws.recv())
-            except Exception:
-                pass  # relay ack is optional
+            ws.send("HELLO")
+            resp = ws.recv()
+            if not isinstance(resp, str) or not resp.startswith("NONCE:"):
+                log.error("Unexpected challenge from relay: %r", resp)
+                return False
+            nonce = resp[len("NONCE:"):]
+            mac = hmac.new(secret.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+            ws.send("AUTH:" + mac)
+            result = ws.recv()
+            log.info("Relay replied: %s", result)
+            return isinstance(result, str) and result.startswith("OK")
         finally:
             ws.close()
-        return True
     except Exception as e:
         log.error("Failed to reach relay at %s: %s", url, e)
         return False
@@ -202,7 +217,7 @@ def main():
                 log.info("Authorized msg from %s (no trigger word): %r", sender, body)
                 continue
             log.info("TRIGGER from %s: %r", sender, body)
-            opened = trigger_door(cfg["host"], cfg["port"], cfg["code"])
+            opened = trigger_door(cfg["host"], cfg["port"], cfg["secret"])
             reply = cfg["reply"]
             if reply.get("enabled"):
                 msg = reply.get("on_open" if opened else "on_fail")
