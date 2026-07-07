@@ -104,11 +104,16 @@ def high_watermark(conn):
     return row[0] or 0
 
 
+# chat.style = 45 is a 1:1 direct chat; 43 is a group chat. Joining through
+# chat_message_join and requiring style 45 means a "open" in any group chat is
+# ignored — only direct messages can open the door.
 NEW_MESSAGES_SQL = """
     SELECT m.ROWID, h.id, m.text, m.attributedBody
     FROM message AS m
     LEFT JOIN handle AS h ON m.handle_id = h.ROWID
-    WHERE m.ROWID > ? AND m.is_from_me = 0
+    JOIN chat_message_join AS cmj ON cmj.message_id = m.ROWID
+    JOIN chat AS c ON c.ROWID = cmj.chat_id
+    WHERE m.ROWID > ? AND m.is_from_me = 0 AND c.style = 45
     ORDER BY m.ROWID ASC
 """
 
