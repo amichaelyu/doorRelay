@@ -1,0 +1,22 @@
+# doorRelay monitor configuration
+
+# Phone numbers (or iMessage emails) allowed to open the door.
+# Matching ignores formatting — "+1 (650) 555-1234", "6505551234", etc. all
+# compare by their last 10 digits. Emails are matched exactly (lowercased).
+authorized_senders:
+  - "+16505551234"
+  # - "friend@icloud.com"
+
+# The word that triggers the door. Matched case-insensitively as a whole word,
+# so "open", "OPEN", "Open the door" all work, but "reopen" does not.
+trigger_word: "open"
+
+# ESP32 relay WebSocket server (from relay.ino: local_IP + WS_PORT).
+relay:
+  host: "192.168.0.67"
+  port: 81
+  # Shared secret sent to the relay. MUST match DOOR_CODE in relay.ino exactly.
+  code: "k9$Wm2!qR7#zP4@xL8&"
+
+# How often to check chat.db for new messages, in seconds.
+poll_interval: 2
