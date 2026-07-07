@@ -1,0 +1,12 @@
+[project]
+name = "doorrelay"
+version = "0.1.0"
+description = "Monitor macOS chat.db and open an ESP32 relay door on an authorized 'open' text"
+requires-python = ">=3.9"
+dependencies = [
+    "pyyaml",
+    "websocket-client",
+]
+
+[tool.uv]
+package = false

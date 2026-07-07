@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Monitor the macOS Messages database (chat.db) and open the door when an
 authorized sender texts the trigger word.
@@ -12,7 +11,7 @@ Requires Full Disk Access for whatever runs it (Terminal / python), otherwise
 chat.db cannot be read.
 
 Usage:
-    ./.venv/bin/python door_monitor.py [path/to/config.yaml]
+    uv run door_monitor.py [path/to/config.yaml]
 """
 
 import os
