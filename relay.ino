@@ -16,6 +16,8 @@
 
 #include <WiFi.h>
 #include <WebSocketsServer.h>
+#include <esp_random.h>     // hardware RNG for unguessable nonces
+#include "mbedtls/md.h"     // HMAC-SHA256
 
 // ---------- User config ----------
 const char* ssid     = "YOUR_WIFI_SSID";
@@ -31,9 +33,13 @@ IPAddress secondaryDNS(1, 0, 0, 1);
 const uint16_t WS_PORT   = 81;      // WebSocket server port
 const int      RELAY_PIN = 26;      // GPIO -> relay module trigger
 
-// Shared secret. The relay ONLY fires when an inbound message equals this
-// string exactly. Must match DOOR_CODE in config.yaml / door_monitor.py.
-const char* DOOR_CODE = "k9$Wm2!qR7#zP4@xL8&";
+// Shared HMAC secret. This NEVER travels over the wire. Instead the relay
+// challenges each client with a fresh random nonce; the client must reply with
+// HMAC-SHA256(secret, nonce). Must match `secret` in config.yaml.
+const char* SHARED_SECRET = "k9$Wm2!qR7#zP4@xL8&";
+
+// A nonce is single-use and expires this many ms after it is issued.
+const unsigned long NONCE_TTL_MS = 30000;   // 30 seconds
 
 // This module is HIGH-level trigger, so active-low is FALSE.
 // (If you ever swap to an active-low module, flip this to true.)
@@ -66,30 +72,98 @@ void triggerRelay() {
   Serial.println("Relay ON (5s)");
 }
 
+// ---- Challenge-response state (one pending nonce per WS client) ----
+#define MAX_WS_CLIENTS 8
+struct Challenge {
+  char nonce[33];          // 16 random bytes as 32 hex chars + NUL
+  unsigned long issuedAt;  // millis() when issued
+  bool valid;              // false once used or never issued
+};
+Challenge challenges[MAX_WS_CLIENTS];
+
+// HMAC-SHA256(key, msg) -> 64-char lowercase hex string (out must hold 65).
+void hmacSha256Hex(const char* key, const char* msg, char* out) {
+  uint8_t mac[32];
+  const mbedtls_md_info_t* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  mbedtls_md_context_t ctx;
+  mbedtls_md_init(&ctx);
+  mbedtls_md_setup(&ctx, info, 1);            // 1 => HMAC mode
+  mbedtls_md_hmac_starts(&ctx, (const uint8_t*)key, strlen(key));
+  mbedtls_md_hmac_update(&ctx, (const uint8_t*)msg, strlen(msg));
+  mbedtls_md_hmac_finish(&ctx, mac);
+  mbedtls_md_free(&ctx);
+  for (int i = 0; i < 32; i++) sprintf(out + i * 2, "%02x", mac[i]);
+  out[64] = '\0';
+}
+
+// Fill out[33] with 16 hardware-random bytes as hex.
+void makeNonce(char* out) {
+  for (int i = 0; i < 16; i++) sprintf(out + i * 2, "%02x", (uint8_t)(esp_random() & 0xFF));
+  out[32] = '\0';
+}
+
+// Constant-time compare of two n-byte strings (avoids HMAC timing leaks).
+bool constTimeEqual(const char* a, const char* b, size_t n) {
+  uint8_t diff = 0;
+  for (size_t i = 0; i < n; i++) diff |= (uint8_t)a[i] ^ (uint8_t)b[i];
+  return diff == 0;
+}
+
 void onWsEvent(uint8_t clientNum, WStype_t type, uint8_t* payload, size_t len) {
   switch (type) {
     case WStype_CONNECTED: {
       IPAddress ip = webSocket.remoteIP(clientNum);
       Serial.printf("Client %u connected from %s\n", clientNum, ip.toString().c_str());
+      if (clientNum < MAX_WS_CLIENTS) challenges[clientNum].valid = false;
       break;
     }
     case WStype_DISCONNECTED:
       Serial.printf("Client %u disconnected\n", clientNum);
+      if (clientNum < MAX_WS_CLIENTS) challenges[clientNum].valid = false;
       break;
 
     case WStype_TEXT:
     case WStype_BIN: {
-      // Only fire when the message matches the shared secret exactly.
-      size_t codeLen = strlen(DOOR_CODE);
-      bool authorized = (len == codeLen) &&
-                        (memcmp(payload, DOOR_CODE, codeLen) == 0);
-      if (authorized) {
-        Serial.printf("Valid code from client %u\n", clientNum);
-        triggerRelay();
-        webSocket.sendTXT(clientNum, "OK: relay on 5s");
+      if (clientNum >= MAX_WS_CLIENTS) break;   // out of tracked range, ignore
+
+      // Protocol:
+      //   client -> "HELLO"          request a challenge
+      //   server -> "NONCE:<hex>"    fresh single-use nonce
+      //   client -> "AUTH:<hmachex>" HMAC-SHA256(secret, nonce)
+      //   server -> "OK: relay on 5s" | "DENIED"
+      String msg;
+      msg.reserve(len + 1);
+      for (size_t i = 0; i < len; i++) msg += (char)payload[i];   // no NUL assumption
+
+      if (msg.startsWith("AUTH:")) {
+        String provided = msg.substring(5);
+        Challenge& ch = challenges[clientNum];
+        bool fresh = ch.valid && (millis() - ch.issuedAt < NONCE_TTL_MS);
+        ch.valid = false;                       // single-use: consume regardless
+
+        char expected[65];
+        hmacSha256Hex(SHARED_SECRET, ch.nonce, expected);
+        bool ok = fresh && provided.length() == 64 &&
+                  constTimeEqual(provided.c_str(), expected, 64);
+
+        if (ok) {
+          Serial.printf("Client %u authenticated\n", clientNum);
+          triggerRelay();
+          webSocket.sendTXT(clientNum, "OK: relay on 5s");
+        } else {
+          Serial.printf("Client %u auth FAILED\n", clientNum);
+          webSocket.sendTXT(clientNum, "DENIED");
+        }
       } else {
-        Serial.printf("Rejected message from client %u (bad code)\n", clientNum);
-        webSocket.sendTXT(clientNum, "DENIED");
+        // Any other message is treated as a challenge request.
+        Challenge& ch = challenges[clientNum];
+        makeNonce(ch.nonce);
+        ch.issuedAt = millis();
+        ch.valid = true;
+        String reply = "NONCE:";
+        reply += ch.nonce;
+        webSocket.sendTXT(clientNum, reply);
+        Serial.printf("Issued nonce to client %u\n", clientNum);
       }
       break;
     }
