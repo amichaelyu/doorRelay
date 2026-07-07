@@ -20,6 +20,7 @@ import sys
 import time
 import sqlite3
 import logging
+import subprocess
 
 import yaml
 import websocket  # from the `websocket-client` package
@@ -45,14 +46,16 @@ def load_config(path):
     relay = cfg.get("relay") or {}
     return {
         "authorized": {normalize_sender(str(s)) for s in senders},
+        # Match the trigger word anywhere in the message (substring, any case).
         "trigger_re": re.compile(
-            r"\b" + re.escape(str(cfg.get("trigger_word", "open"))) + r"\b",
+            re.escape(str(cfg.get("trigger_word", "open"))),
             re.IGNORECASE,
         ),
         "host": relay.get("host", "192.168.0.67"),
         "port": int(relay.get("port", 81)),
         "code": str(relay.get("code", "")),
         "poll_interval": float(cfg.get("poll_interval", 2)),
+        "reply": cfg.get("reply") or {},
     }
 
 
@@ -126,6 +129,39 @@ def trigger_door(host, port, code):
         return False
 
 
+# AppleScript takes the recipient + body as argv, so nothing from a text
+# message is ever interpolated into the script source (no injection risk).
+_SEND_SCRIPT = '''
+on run {targetHandle, targetMessage}
+    tell application "Messages"
+        set svc to 1st account whose service type = iMessage
+        try
+            set toBuddy to participant targetHandle of svc
+        on error
+            set toBuddy to buddy targetHandle of svc
+        end try
+        send targetMessage to toBuddy
+    end tell
+end run
+'''
+
+
+def send_imessage(handle, text):
+    try:
+        subprocess.run(
+            ["osascript", "-", handle, text],
+            input=_SEND_SCRIPT,
+            text=True, capture_output=True, timeout=15, check=True,
+        )
+        log.info("Replied to %s: %r", handle, text)
+        return True
+    except subprocess.CalledProcessError as e:
+        log.error("Reply to %s failed: %s", handle, (e.stderr or "").strip())
+    except Exception as e:
+        log.error("Reply to %s failed: %s", handle, e)
+    return False
+
+
 def main():
     cfg_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "config.yaml"
@@ -166,7 +202,12 @@ def main():
                 log.info("Authorized msg from %s (no trigger word): %r", sender, body)
                 continue
             log.info("TRIGGER from %s: %r", sender, body)
-            trigger_door(cfg["host"], cfg["port"], cfg["code"])
+            opened = trigger_door(cfg["host"], cfg["port"], cfg["code"])
+            reply = cfg["reply"]
+            if reply.get("enabled"):
+                msg = reply.get("on_open" if opened else "on_fail")
+                if msg:
+                    send_imessage(sender, msg)
 
         time.sleep(cfg["poll_interval"])
 
