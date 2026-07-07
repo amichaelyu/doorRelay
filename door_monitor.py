@@ -46,6 +46,11 @@ def load_config(path):
         log.warning("No authorized_senders configured — nothing will ever trigger.")
 
     relay = cfg.get("relay") or {}
+    setup = cfg.get("setup") or {}
+    # Resolve the vcard path relative to the config file's directory.
+    vcard = setup.get("vcard", "Door.vcf")
+    if vcard and not os.path.isabs(vcard):
+        vcard = os.path.join(os.path.dirname(os.path.abspath(path)), vcard)
     return {
         "authorized": {normalize_sender(str(s)) for s in senders},
         # Match the trigger word anywhere in the message (substring, any case).
@@ -59,6 +64,16 @@ def load_config(path):
         "secret": str(relay.get("secret", relay.get("code", ""))),
         "poll_interval": float(cfg.get("poll_interval", 2)),
         "reply": cfg.get("reply") or {},
+        "setup": {
+            "enabled": bool(setup.get("enabled", False)),
+            "trigger_re": re.compile(
+                re.escape(str(setup.get("trigger_word", "setup"))),
+                re.IGNORECASE,
+            ),
+            "message": setup.get("message", ""),
+            "shortcut_url": setup.get("shortcut_url", ""),
+            "vcard": vcard,
+        },
     }
 
 
@@ -182,6 +197,50 @@ def send_imessage(handle, text):
     return False
 
 
+# Same argv-only pattern as _SEND_SCRIPT: the file path arrives as argv, never
+# interpolated into the script source. Sends the file as an iMessage attachment.
+_SEND_FILE_SCRIPT = '''
+on run {targetHandle, targetFile}
+    tell application "Messages"
+        set svc to 1st account whose service type = iMessage
+        try
+            set toBuddy to participant targetHandle of svc
+        on error
+            set toBuddy to buddy targetHandle of svc
+        end try
+        send (POSIX file targetFile) to toBuddy
+    end tell
+end run
+'''
+
+
+def send_file(handle, path):
+    if not path or not os.path.isfile(path):
+        log.error("Cannot send attachment to %s: file not found: %r", handle, path)
+        return False
+    try:
+        subprocess.run(
+            ["osascript", "-", handle, path],
+            input=_SEND_FILE_SCRIPT,
+            text=True, capture_output=True, timeout=30, check=True,
+        )
+        log.info("Sent attachment to %s: %s", handle, path)
+        return True
+    except subprocess.CalledProcessError as e:
+        log.error("Attachment to %s failed: %s", handle, (e.stderr or "").strip())
+    except Exception as e:
+        log.error("Attachment to %s failed: %s", handle, e)
+    return False
+
+
+def send_setup(handle, setup):
+    """Reply with the Shortcut link, then send the Door contact card."""
+    msg_parts = [p for p in (setup.get("message"), setup.get("shortcut_url")) if p]
+    if msg_parts:
+        send_imessage(handle, "\n".join(msg_parts))
+    send_file(handle, setup.get("vcard"))
+
+
 def main():
     cfg_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "config.yaml"
@@ -217,6 +276,11 @@ def main():
             if sender is None:
                 continue
             if normalize_sender(sender) not in cfg["authorized"]:
+                continue
+            setup = cfg["setup"]
+            if setup["enabled"] and setup["trigger_re"].search(body):
+                log.info("SETUP request from %s: %r", sender, body)
+                send_setup(sender, setup)
                 continue
             if not cfg["trigger_re"].search(body):
                 log.info("Authorized msg from %s (no trigger word): %r", sender, body)
