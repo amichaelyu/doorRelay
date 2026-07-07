@@ -1,16 +1,17 @@
 # doorRelay monitor configuration
 
-# Phone numbers (or iMessage emails) allowed to open the door.
+# Phone numbers (or iMessage emails) allowed to open the door, mapped to a name
+# (the name is used when importing contacts in prod).
 # Matching ignores formatting — "+1 (650) 555-1234", "6505551234", etc. all
 # compare by their last 10 digits. Emails are matched exactly (lowercased).
 authorized_senders:
-  - "+15175758327" # michael
-  - "+14088932795" # welton
-  - "+14159716732" # thijs
-  - "+15038471298" # alan
-  - "+16462808966" # james
-  - "+13175297439" # hannah
-  - "+15714588718" # jag
+  "+15175758327": michael
+  "+14088932795": welton
+  "+14159716732": thijs
+  "+15038471298": alan
+  "+16462808966": james
+  "+13175297439": hannah
+  "+15714588718": jag
 
 # The word that triggers the door. Matched case-insensitively anywhere in the
 # message, so "open", "OPEN", "Open the door", and even "reopen" all trigger.

@@ -26,8 +26,17 @@ import subprocess
 
 import yaml
 import websocket  # from the `websocket-client` package
+from dotenv import load_dotenv
 
 CHAT_DB = os.path.expanduser("~/Library/Messages/chat.db")
+
+
+def env_flag(name, default=False):
+    """Read a boolean-ish env var (1/true/yes/on -> True), else `default`."""
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,18 +46,32 @@ logging.basicConfig(
 log = logging.getLogger("door")
 
 
+def iter_senders(cfg):
+    """Yield (raw, name) for each authorized sender. `authorized_senders` is a
+    `{number: name}` mapping; a bare list of numbers is also accepted (the name
+    then defaults to the number)."""
+    senders = cfg.get("authorized_senders") or {}
+    items = senders.items() if isinstance(senders, dict) else ((s, None) for s in senders)
+    for raw, name in items:
+        raw = str(raw).strip()
+        if raw:
+            yield raw, (str(name).strip() if name else raw)
+
+
 def load_config(path):
     with open(path, "r") as f:
         cfg = yaml.safe_load(f) or {}
 
-    senders = cfg.get("authorized_senders") or []
+    senders = list(iter_senders(cfg))
     if not senders:
         log.warning("No authorized_senders configured — nothing will ever trigger.")
 
     relay = cfg.get("relay") or {}
     setup = cfg.get("setup") or {}
     return {
-        "authorized": {normalize_sender(str(s)) for s in senders},
+        "authorized": {normalize_sender(raw) for raw, _ in senders},
+        # (raw, name) pairs, used to seed Contacts when prod is enabled.
+        "senders": senders,
         # Match the trigger word anywhere in the message (substring, any case).
         "trigger_re": re.compile(
             re.escape(str(cfg.get("trigger_word", "open"))),
@@ -199,15 +222,107 @@ def send_setup(handle, setup):
         send_imessage(handle, "\n".join(msg_parts))
 
 
+# Dumps every stored phone value, one per line, so we can dedupe by digits.
+_LIST_PHONES_SCRIPT = '''
+tell application "Contacts"
+    set out to ""
+    repeat with p in people
+        repeat with ph in (phones of p)
+            set out to out & (value of ph) & linefeed
+        end repeat
+    end repeat
+    return out
+end tell
+'''
+
+
+def existing_contact_digits():
+    """Set of last-10-digit keys for every phone already in Contacts, or None if
+    Contacts can't be read (e.g. Automation access not yet granted)."""
+    try:
+        res = subprocess.run(
+            ["osascript", "-e", _LIST_PHONES_SCRIPT],
+            capture_output=True, text=True, timeout=60, check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        log.error("Cannot read Contacts (grant Automation access to your "
+                  "terminal in Privacy & Security): %s", (e.stderr or "").strip())
+        return None
+    except Exception as e:
+        log.error("Cannot read Contacts: %s", e)
+        return None
+    digits = set()
+    for line in res.stdout.splitlines():
+        d = re.sub(r"\D", "", line)
+        if len(d) >= 10:
+            digits.add(d[-10:])
+    return digits
+
+
+# argv-only, same as the other send scripts — no name/number is interpolated
+# into the source, so nothing from config can inject AppleScript.
+_CREATE_CONTACT_SCRIPT = '''
+on run {targetName, targetPhone}
+    tell application "Contacts"
+        set newPerson to make new person with properties {first name:targetName}
+        make new phone at end of phones of newPerson with properties {label:"mobile", value:targetPhone}
+        save
+    end tell
+end run
+'''
+
+
+def create_contact(name, phone):
+    try:
+        subprocess.run(
+            ["osascript", "-", name, phone],
+            input=_CREATE_CONTACT_SCRIPT,
+            text=True, capture_output=True, timeout=30, check=True,
+        )
+        log.info("Added contact %s (%s)", name, phone)
+        return True
+    except subprocess.CalledProcessError as e:
+        log.error("Failed to add contact %s (%s): %s", name, phone, (e.stderr or "").strip())
+    except Exception as e:
+        log.error("Failed to add contact %s (%s): %s", name, phone, e)
+    return False
+
+
+def import_contacts(cfg):
+    """Add every authorized phone number to Contacts if not already present."""
+    # Only phone entries can become phone contacts; skip email senders.
+    senders = [(raw, name) for raw, name in cfg["senders"] if "@" not in raw]
+    if not senders:
+        log.info("No phone senders to import.")
+        return
+    existing = existing_contact_digits()
+    if existing is None:
+        return  # couldn't read Contacts; error already logged
+    added = 0
+    for raw, name in senders:
+        digits = normalize_sender(raw)
+        if digits and digits in existing:
+            continue
+        if create_contact(name, raw):
+            existing.add(digits)
+            added += 1
+    log.info("Contact import: %d added, %d already present.", added, len(senders) - added)
+
+
 def main():
-    cfg_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "config.yaml"
-    )
+    here = os.path.dirname(os.path.abspath(__file__))
+    load_dotenv(os.path.join(here, ".env"))
+    cfg_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "config.yaml")
     cfg = load_config(cfg_path)
     log.info(
         "Watching chat.db | %d authorized sender(s) | relay ws://%s:%d",
         len(cfg["authorized"]), cfg["host"], cfg["port"],
     )
+
+    # prod defaults to false; when true, seed Contacts with authorized senders.
+    if env_flag("prod"):
+        log.info("prod=true — importing authorized senders into Contacts…")
+        import_contacts(cfg)
 
     try:
         conn = open_db()
