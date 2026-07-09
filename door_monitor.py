@@ -362,9 +362,18 @@ def main():
             opened = trigger_door(cfg["host"], cfg["port"], cfg["secret"])
             reply = cfg["reply"]
             if reply.get("enabled"):
-                msg = reply.get("on_open" if opened else "on_fail")
-                if msg:
-                    send_imessage(sender, msg)
+                if opened:
+                    open_msg = reply.get("on_open")
+                    if open_msg:
+                        send_imessage(sender, open_msg)
+                    close_msg = reply.get("on_close")
+                    if close_msg:
+                        time.sleep(2)
+                        send_imessage(sender, close_msg)
+                else:
+                    fail_msg = reply.get("on_fail")
+                    if fail_msg:
+                        send_imessage(sender, fail_msg)
 
         time.sleep(cfg["poll_interval"])
 

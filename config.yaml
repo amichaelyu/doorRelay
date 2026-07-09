@@ -33,7 +33,8 @@ poll_interval: 1
 # (System Settings > Privacy & Security > Automation).
 reply:
   enabled: true
-  on_open: "🚪 Door opened."
+  on_open: "🚪 Door opened for 2 seconds."
+  on_close: "🔒 Door closed."
   on_fail: "⚠️ Couldn't reach the door relay."
 
 # When an authorized sender texts the setup trigger word, reply with the
