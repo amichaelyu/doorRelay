@@ -31,7 +31,7 @@ IPAddress primaryDNS(1, 1, 1, 1);
 IPAddress secondaryDNS(1, 0, 0, 1);
 
 const uint16_t WS_PORT   = 81;      // WebSocket server port
-const int      RELAY_PIN = 26;      // GPIO -> relay module trigger
+const int      RELAY_PIN = 23;      // GPIO -> relay module trigger
 
 // Shared HMAC secret. This NEVER travels over the wire. Instead the relay
 // challenges each client with a fresh random nonce; the client must reply with
@@ -45,7 +45,7 @@ const unsigned long NONCE_TTL_MS = 30000;   // 30 seconds
 // (If you ever swap to an active-low module, flip this to true.)
 const bool     ACTIVE_LOW = false;
 
-const unsigned long PULSE_MS = 5000;   // 5 second pulse
+const unsigned long PULSE_MS = 2000;   // 2 second pulse
 
 // If true: a new request while already on RESTARTS the 5s window.
 // If false: requests during an active pulse are ignored.
@@ -174,6 +174,10 @@ void onWsEvent(uint8_t clientNum, WStype_t type, uint8_t* payload, size_t len) {
 }
 
 void setup() {
+  // 80 MHz is the lowest clock WiFi supports; roughly halves active CPU draw
+  // vs the default 240 MHz. APB stays 80 MHz, so Serial timing is unaffected.
+  setCpuFrequencyMhz(80);
+
   Serial.begin(115200);
 
   pinMode(RELAY_PIN, OUTPUT);
@@ -184,6 +188,13 @@ void setup() {
   }
 
   WiFi.begin(ssid, password);
+
+  // Radio sleeps between beacon listen intervals; the AP buffers packets for
+  // us meanwhile. Adds up to ~300 ms latency to an incoming connection, which
+  // a door buzz never notices. If the relay ever gets flaky with your router,
+  // drop to WIFI_PS_MIN_MODEM (wakes every DTIM; saves less, most compatible).
+  WiFi.setSleep(WIFI_PS_MAX_MODEM);
+
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);                   // only runs at startup, before the server exists
@@ -208,4 +219,10 @@ void loop() {
     relayWrite(false);
     Serial.println("Relay OFF");
   }
+
+  // Block instead of spinning: during delay() the FreeRTOS idle task halts the
+  // CPU until the next interrupt, which is most of the chip's idle draw. lwIP
+  // buffers socket data in its own task, so polling every 20 ms loses nothing.
+  // Short slices while the pulse is live keep the off-edge accurate.
+  delay(relayOn ? 2 : 20);
 }
