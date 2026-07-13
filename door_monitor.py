@@ -334,7 +334,17 @@ def main():
     last_rowid = high_watermark(conn)
     log.info("Starting from message ROWID %d — only new messages will count.", last_rowid)
 
+    # Send a heartbeat message every minute so we know the monitor is alive.
+    heartbeat_handle = "door@yumichael.com"
+    heartbeat_interval = 60.0
+    next_heartbeat = time.monotonic()
+
     while True:
+        now = time.monotonic()
+        if now >= next_heartbeat:
+            send_imessage(heartbeat_handle, "door monitor heartbeat")
+            next_heartbeat = now + heartbeat_interval
+
         try:
             rows = conn.execute(NEW_MESSAGES_SQL, (last_rowid,)).fetchall()
         except sqlite3.OperationalError as e:
