@@ -336,7 +336,7 @@ def main():
 
     # Send a heartbeat message every minute so we know the monitor is alive.
     heartbeat_handle = "door@yumichael.com"
-    heartbeat_interval = 60.0
+    heartbeat_interval = 10.0
     next_heartbeat = time.monotonic()
 
     while True:
