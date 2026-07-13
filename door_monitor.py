@@ -137,6 +137,9 @@ def high_watermark(conn):
     return row[0] or 0
 
 
+HEART_RE = re.compile(r"heart", re.IGNORECASE)
+
+
 # chat.style = 45 is a 1:1 direct chat; 43 is a group chat. Joining through
 # chat_message_join and requiring style 45 means a "open" in any group chat is
 # ignored — only direct messages can open the door.
@@ -334,7 +337,6 @@ def main():
     last_rowid = high_watermark(conn)
     log.info("Starting from message ROWID %d — only new messages will count.", last_rowid)
 
-    # Send a heartbeat message every second so we know the monitor is alive.
     heartbeat_handle = "door@yumichael.com"
     heartbeat_interval = 1.0
     next_heartbeat = time.monotonic()
@@ -342,7 +344,7 @@ def main():
     while True:
         now = time.monotonic()
         if now >= next_heartbeat:
-            send_imessage(heartbeat_handle, "door monitor heartbeat")
+            send_imessage(heartbeat_handle, "hello")
             next_heartbeat = now + heartbeat_interval
 
         try:
@@ -359,6 +361,10 @@ def main():
             if sender is None:
                 continue
             if normalize_sender(sender) not in cfg["authorized"]:
+                continue
+            if HEART_RE.search(body):
+                log.info("HEART from %s: %r", sender, body)
+                send_imessage(sender, "beat")
                 continue
             setup = cfg["setup"]
             if setup["enabled"] and setup["trigger_re"].search(body):
