@@ -209,7 +209,8 @@ def send_imessage(handle, text):
             input=_SEND_SCRIPT,
             text=True, capture_output=True, timeout=15, check=True,
         )
-        log.info("Replied to %s: %r", handle, text)
+        if handle != "door@yumichael.com":
+            log.info("Replied to %s: %r", handle, text)
         return True
     except subprocess.CalledProcessError as e:
         log.error("Reply to %s failed: %s", handle, (e.stderr or "").strip())
