@@ -7,6 +7,8 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "pyyaml",
     "websocket-client",
+    "fastapi",
+    "uvicorn",
 ]
 
 [tool.uv]
