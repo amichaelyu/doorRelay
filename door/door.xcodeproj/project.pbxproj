@@ -6,7 +6,18 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		DEAD000000000000000000F2 /* DoorWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DEAD000000000000000000B2 /* DoorWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		DEAD000000000000000000E2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98C4A6EF30060549009CB308 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DEAD000000000000000000B1;
+			remoteInfo = DoorWidgetExtension;
+		};
 		98C4A7053006054A009CB308 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 98C4A6EF30060549009CB308 /* Project object */;
@@ -23,13 +34,51 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		DEAD000000000000000000F1 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				DEAD000000000000000000F2 /* DoorWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		DEAD000000000000000000B2 /* DoorWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DoorWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		98C4A6F730060549009CB308 /* door.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = door.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		98C4A7043006054A009CB308 /* doorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = doorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		98C4A70E3006054A009CB308 /* doorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = doorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DEAD000000000000000000A3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DEAD000000000000000000B1 /* DoorWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		DEAD000000000000000000A1 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		DEAD000000000000000000A2 /* DoorWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DEAD000000000000000000A3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
+			path = DoorWidget;
+			sourceTree = "<group>";
+		};
 		98C4A6F930060549009CB308 /* door */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = door;
@@ -69,13 +118,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DEAD000000000000000000C2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		98C4A6EE30060549009CB308 = {
 			isa = PBXGroup;
 			children = (
+				DEAD000000000000000000A1 /* Shared */,
 				98C4A6F930060549009CB308 /* door */,
+				DEAD000000000000000000A2 /* DoorWidget */,
 				98C4A7073006054A009CB308 /* doorTests */,
 				98C4A7113006054A009CB308 /* doorUITests */,
 				98C4A6F830060549009CB308 /* Products */,
@@ -88,6 +146,7 @@
 				98C4A6F730060549009CB308 /* door.app */,
 				98C4A7043006054A009CB308 /* doorTests.xctest */,
 				98C4A70E3006054A009CB308 /* doorUITests.xctest */,
+				DEAD000000000000000000B2 /* DoorWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,13 +161,16 @@
 				98C4A6F330060549009CB308 /* Sources */,
 				98C4A6F430060549009CB308 /* Frameworks */,
 				98C4A6F530060549009CB308 /* Resources */,
+				DEAD000000000000000000F1 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				DEAD000000000000000000E1 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				98C4A6F930060549009CB308 /* door */,
+				DEAD000000000000000000A1 /* Shared */,
 			);
 			name = door;
 			packageProductDependencies = (
@@ -163,6 +225,29 @@
 			productReference = 98C4A70E3006054A009CB308 /* doorUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		DEAD000000000000000000B1 /* DoorWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DEAD000000000000000000D0 /* Build configuration list for PBXNativeTarget "DoorWidgetExtension" */;
+			buildPhases = (
+				DEAD000000000000000000C1 /* Sources */,
+				DEAD000000000000000000C2 /* Frameworks */,
+				DEAD000000000000000000C3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DEAD000000000000000000A2 /* DoorWidget */,
+				DEAD000000000000000000A1 /* Shared */,
+			);
+			name = DoorWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = DoorWidgetExtension;
+			productReference = DEAD000000000000000000B2 /* DoorWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +269,9 @@
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = 98C4A6F630060549009CB308;
 					};
+					DEAD000000000000000000B1 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = 98C4A6F230060549009CB308 /* Build configuration list for PBXProject "door" */;
@@ -201,6 +289,7 @@
 			projectRoot = "";
 			targets = (
 				98C4A6F630060549009CB308 /* door */,
+				DEAD000000000000000000B1 /* DoorWidgetExtension */,
 				98C4A7033006054A009CB308 /* doorTests */,
 				98C4A70D3006054A009CB308 /* doorUITests */,
 			);
@@ -223,6 +312,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		98C4A70C3006054A009CB308 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DEAD000000000000000000C3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,9 +349,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DEAD000000000000000000C1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		DEAD000000000000000000E1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DEAD000000000000000000B1 /* DoorWidgetExtension */;
+			targetProxy = DEAD000000000000000000E2 /* PBXContainerItemProxy */;
+		};
 		98C4A7063006054A009CB308 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 98C4A6F630060549009CB308 /* door */;
@@ -538,6 +646,66 @@
 			};
 			name = Release;
 		};
+		DEAD000000000000000000D1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SNC2X5N2CY;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DoorWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Door;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yumichael.door.DoorWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DEAD000000000000000000D2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SNC2X5N2CY;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DoorWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Door;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yumichael.door.DoorWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -573,6 +741,15 @@
 			buildConfigurations = (
 				98C4A71F3006054A009CB308 /* Debug */,
 				98C4A7203006054A009CB308 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DEAD000000000000000000D0 /* Build configuration list for PBXNativeTarget "DoorWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DEAD000000000000000000D1 /* Debug */,
+				DEAD000000000000000000D2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
