@@ -9,7 +9,11 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.openURL) private var openURL
     @State private var state: OpenState = .idle
+
+    /// Ready-made "Open Door" shortcut (see config.yaml `setup.shortcut_url`).
+    private let shortcutURL = URL(string: "https://www.icloud.com/shortcuts/74a72e0e1fcb4b6eb5520ae692a0347e")!
 
     enum OpenState: Equatable {
         case idle
@@ -53,6 +57,13 @@ struct ContentView: View {
             .controlSize(.large)
             .disabled(state == .opening)
             .padding(.horizontal, 24)
+
+            Button {
+                openURL(shortcutURL)
+            } label: {
+                Label("Add “Open Door” Shortcut", systemImage: "plus.app")
+                    .font(.callout)
+            }
             .padding(.bottom, 40)
         }
     }
