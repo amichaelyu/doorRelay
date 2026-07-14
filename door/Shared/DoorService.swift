@@ -1,0 +1,44 @@
+//
+//  DoorService.swift
+//  Shared between the app and the widget extension.
+//
+//  One place that knows how to talk to the door opener HTTP API
+//  (see door_monitor_api.py). It POSTs to /open with the shared bearer
+//  token — the same contract the Cloudflare Worker uses.
+//
+
+import Foundation
+
+enum DoorService {
+    /// Public endpoint fronted by the Cloudflare Worker at door.yumichael.com.
+    static let openURL = URL(string: "https://door.yumichael.com/open")!
+
+    /// Shared API token. NOTE: this ships inside the app binary — anyone who
+    /// extracts the build can open the door. Rotate DOOR_API_TOKEN (in .env)
+    /// and this constant together if it ever leaks.
+    static let token = "n6cl7tVUPLstg5CAXAA3VurjrXTAsBtO8i71-zNVhPk"
+
+    struct DoorError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    /// Pulse the relay. Returns normally on success; throws on any transport
+    /// error or non-2xx response so callers can surface a message.
+    static func open() async throws {
+        var request = URLRequest(url: openURL)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw DoorError(message: "No response from the door service.")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            let detail = body.isEmpty ? "" : " — \(body)"
+            throw DoorError(message: "Door service returned \(http.statusCode)\(detail)")
+        }
+    }
+}
