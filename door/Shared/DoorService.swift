@@ -19,26 +19,28 @@ enum DoorService {
     static let token = "n6cl7tVUPLstg5CAXAA3VurjrXTAsBtO8i71-zNVhPk"
 
     struct DoorError: LocalizedError {
-        let message: String
-        var errorDescription: String? { message }
+        var errorDescription: String? { "Couldn't connect to door." }
     }
 
-    /// Pulse the relay. Returns normally on success; throws on any transport
-    /// error or non-2xx response so callers can surface a message.
+    /// Pulse the relay. Returns normally on success; on any transport error or
+    /// non-2xx response throws a single friendly "Couldn't connect to door."
     static func open() async throws {
         var request = URLRequest(url: openURL)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 15
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw DoorError(message: "No response from the door service.")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? ""
-            let detail = body.isEmpty ? "" : " — \(body)"
-            throw DoorError(message: "Door service returned \(http.statusCode)\(detail)")
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                throw DoorError()
+            }
+        } catch is DoorError {
+            throw DoorError()
+        } catch {
+            // Wrap URLSession/transport errors in the same friendly message.
+            throw DoorError()
         }
     }
 }
