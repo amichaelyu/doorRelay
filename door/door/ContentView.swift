@@ -10,10 +10,13 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
     @State private var state: OpenState = .idle
 
-    /// Ready-made "Open Door" shortcut (see config.yaml `setup.shortcut_url`).
-    private let shortcutURL = URL(string: "https://www.icloud.com/shortcuts/74a72e0e1fcb4b6eb5520ae692a0347e")!
+    /// Ready-made "Open Door" shortcut, prebuilt on the app's Open Door
+    /// App Intent so it runs through the same API path (see config.yaml
+    /// `setup.shortcut_url`). Tapping installs it in one step.
+    private let shortcutURL = URL(string: "https://www.icloud.com/shortcuts/50603687740c4b1cbc30c12a2030c509")!
 
     enum OpenState: Equatable {
         case idle
@@ -31,6 +34,10 @@ struct ContentView: View {
                 .foregroundStyle(iconColor)
                 .contentTransition(.symbolEffect(.replace))
                 .animation(.snappy, value: state)
+                .onTapGesture(perform: open)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel("Open Door")
+                .disabled(state == .opening)
 
             Text(statusText)
                 .font(.headline)
@@ -40,23 +47,6 @@ struct ContentView: View {
                 .frame(minHeight: 44)
 
             Spacer()
-
-            Button(action: open) {
-                HStack(spacing: 10) {
-                    if state == .opening {
-                        ProgressView()
-                            .tint(.white)
-                    }
-                    Text(state == .opening ? "Opening…" : "Open Door")
-                        .font(.title2.weight(.bold))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 64)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(state == .opening)
-            .padding(.horizontal, 24)
 
             Button {
                 openURL(shortcutURL)
@@ -94,7 +84,12 @@ struct ContentView: View {
         switch state {
         case .opened: return .green
         case .failed: return .orange
-        default: return .accentColor
+        // Explicit per-appearance tint for the resting door icon so it stays
+        // legible in both modes: a warm brown in light mode, a lighter tan in
+        // dark mode. `colorScheme` tracks the system Light/Dark setting.
+        default: return colorScheme == .dark
+            ? Color(red: 0.82, green: 0.60, blue: 0.44)
+            : Color(red: 0.55, green: 0.33, blue: 0.18)
         }
     }
 
