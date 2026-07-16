@@ -183,18 +183,29 @@ void setup() {
     Serial.println("STA failed to configure static IP");
   }
 
-  WiFi.begin(ssid, password);
-
   // Keep the radio awake for the lowest possible latency on incoming connections.
   WiFi.setSleep(false);
+  // Let the core re-associate on its own after a drop; ensureWifi() also nudges it.
+  WiFi.setAutoReconnect(true);
 
+  WiFi.begin(ssid, password);
+
+  // Wait briefly for the first join, but never block forever. If the AP is down
+  // at boot we still start the server and keep retrying from loop(). We do NOT
+  // reboot on WiFi loss: with no AP to reach, a restart just boot-loops, whereas
+  // a running relay reconnects the moment WiFi comes back.
   Serial.print("Connecting");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);                   // only runs at startup, before the server exists
+  unsigned long startedAt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 15000) {
+    delay(500);
     Serial.print(".");
   }
-  Serial.print("\nConnected. IP: ");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("\nConnected. IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\nNo WiFi yet; starting server, will keep retrying.");
+  }
 
   webSocket.begin();
   webSocket.onEvent(onWsEvent);
@@ -202,8 +213,25 @@ void setup() {
                 WiFi.localIP().toString().c_str(), WS_PORT);
 }
 
+// Non-blocking WiFi keepalive. If the link is down, nudge a reconnect every few
+// seconds. We never reboot on WiFi loss: if the AP is gone there's nothing to
+// connect to, so a healthy relay that's simply waiting beats a boot loop. Once
+// WL_CONNECTED it returns immediately and stops re-issuing begin().
+void ensureWifi() {
+  static unsigned long lastAttempt = 0;
+  if (WiFi.status() == WL_CONNECTED) return;
+
+  unsigned long now = millis();
+  if (lastAttempt != 0 && now - lastAttempt < 5000) return;   // throttle attempts
+  lastAttempt = now;
+  Serial.println("WiFi down; reconnecting...");
+  WiFi.begin(ssid, password);
+}
+
 void loop() {
   webSocket.loop();               // must run every iteration; keeps sockets alive
+
+  ensureWifi();                   // reconnect in the background if the link dropped
 
   // Turn the relay off when the window elapses.
   // Cast to signed long so the comparison survives the ~49-day millis() rollover.
@@ -212,4 +240,6 @@ void loop() {
     relayWrite(false);
     Serial.println("Relay OFF");
   }
+
+  delay(1);   // yield to the RTOS (WiFi/TCP tasks + watchdog); ~1ms, no real latency cost
 }
