@@ -174,10 +174,6 @@ void onWsEvent(uint8_t clientNum, WStype_t type, uint8_t* payload, size_t len) {
 }
 
 void setup() {
-  // 80 MHz is the lowest clock WiFi supports; roughly halves active CPU draw
-  // vs the default 240 MHz. APB stays 80 MHz, so Serial timing is unaffected.
-  setCpuFrequencyMhz(80);
-
   Serial.begin(115200);
 
   pinMode(RELAY_PIN, OUTPUT);
@@ -189,11 +185,8 @@ void setup() {
 
   WiFi.begin(ssid, password);
 
-  // Radio sleeps between beacon listen intervals; the AP buffers packets for
-  // us meanwhile. Adds up to ~300 ms latency to an incoming connection, which
-  // a door buzz never notices. If the relay ever gets flaky with your router,
-  // drop to WIFI_PS_MIN_MODEM (wakes every DTIM; saves less, most compatible).
-  WiFi.setSleep(WIFI_PS_MAX_MODEM);
+  // Keep the radio awake for the lowest possible latency on incoming connections.
+  WiFi.setSleep(false);
 
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED) {
@@ -219,10 +212,4 @@ void loop() {
     relayWrite(false);
     Serial.println("Relay OFF");
   }
-
-  // Block instead of spinning: during delay() the FreeRTOS idle task halts the
-  // CPU until the next interrupt, which is most of the chip's idle draw. lwIP
-  // buffers socket data in its own task, so polling every 20 ms loses nothing.
-  // Short slices while the pulse is live keep the off-edge accurate.
-  delay(relayOn ? 2 : 20);
 }
