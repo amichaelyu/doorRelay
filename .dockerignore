@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+.git/
+.jj/
+
+# Secrets reach the container through compose (env_file / bind mount), never
+# baked into an image layer.
+.env
+config.yaml
+
+door/
+relay/
+run.sh
+Dockerfile
+compose.yaml
