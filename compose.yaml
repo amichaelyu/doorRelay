@@ -1,0 +1,121 @@
+# doorRelay: the FastAPI door opener, the Cloudflare tunnel that fronts it, and
+# the two babysitters that keep the pair current and alive unattended.
+#
+# Nothing is published. The API is reachable only from containers on the
+# `doorrelay` network, which is just cloudflared. The host running this must sit
+# on the relay's LAN (config.yaml relay.host, 192.168.0.67) — bridge NAT reaches
+# it, no host networking required.
+#
+# There is no persistent state here, so no named volumes: config.yaml is a
+# read-only bind mount and secrets arrive through .env. Losing every container
+# on this box costs nothing but a `docker compose up`.
+
+name: doorrelay
+
+services:
+  api:
+    build: .
+    image: doorrelay-api:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Binds beyond loopback because cloudflared now reaches it over the
+      # compose network rather than a shared namespace (see cloudflared below).
+      # The docstring's "never directly exposed" still holds: no ports are
+      # published, and `doorrelay` is a private bridge.
+      DOOR_API_HOST: 0.0.0.0
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    networks: [doorrelay]
+    labels:
+      # Restarted by autoheal when the Dockerfile's healthcheck starts failing.
+      - autoheal=true
+      # Deliberately NOT watchtower-enabled: this image is built from source on
+      # the box, and watchtower can only pull digests from a registry. Updating
+      # the API stays a `./run.sh` (git pull + rebuild). To automate it, publish
+      # to ghcr.io, swap `build: .` for that image, and add the enable label.
+
+  cloudflared:
+    # Unpinned on purpose — this is the one thing watchtower is here to update,
+    # and it's stateless, so the "pin stateful services" rule doesn't bite.
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    # The tunnel comes from the credentials file `cloudflared tunnel create`
+    # already wrote — copy ~/.cloudflared to the Debian box, or point
+    # CLOUDFLARED_DIR at wherever it lands.
+    volumes:
+      - ${CLOUDFLARED_DIR:-${HOME}/.cloudflared}:/etc/cloudflared:ro
+    # That credentials file is mode 400 owned by the host user who created it.
+    # Docker on Linux passes host uids through untouched, so the image's default
+    # nonroot (65532) cannot read it; root can, whatever uid owns the file.
+    user: "0:0"
+    # Identifying the tunnel by UUID rather than the name "doorrelay" skips the
+    # name lookup, so cert.pem is never needed in here. The image's entrypoint
+    # is already `cloudflared --no-autoupdate`, hence the bare subcommand.
+    command:
+      - tunnel
+      - run
+      - --credentials-file
+      - /etc/cloudflared/0a0d2e28-fc78-4d02-a9b6-4504d4af953f.json
+      - --url
+      - http://api:8000
+      - 0a0d2e28-fc78-4d02-a9b6-4504d4af953f
+    networks: [doorrelay]
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    # No healthcheck: the image is distroless, so there is no shell or curl to
+    # run one with. cloudflared reconnects to the edge on its own, and the
+    # restart policy covers an outright crash.
+
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    restart: unless-stopped
+    volumes:
+      # Root-equivalent access to the host. The reason it's acceptable here is
+      # that nothing else on this box matters; on a shared machine, put a
+      # socket proxy in front of it.
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # containrrr/watchtower has been dormant since 1.7.1 and still negotiates
+      # Docker API 1.25, which daemons from v25 on reject outright ("client
+      # version 1.25 is too old"). Forcing 1.41 fixes it and stays within reach
+      # of Debian's older docker.io packages, which cap out there.
+      DOCKER_API_VERSION: "1.41"
+      # Opt-in only: watchtower touches containers carrying the enable label
+      # and ignores everything else, including itself and autoheal.
+      WATCHTOWER_LABEL_ENABLE: "true"
+      # Discard the superseded image instead of accumulating layers on a box
+      # nobody logs into.
+      WATCHTOWER_CLEANUP: "true"
+      # 04:00 local, not a poll interval — a door opener should reconnect its
+      # tunnel while everyone's asleep, not mid-afternoon. Six fields: the
+      # leading one is seconds.
+      WATCHTOWER_SCHEDULE: "0 0 4 * * *"
+      TZ: ${TZ:-America/Los_Angeles}
+    networks: [doorrelay]
+
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    # `restart: unless-stopped` only catches a container that exits. It does
+    # nothing for one that stays up while wedged — which is the realistic
+    # failure here, uvicorn alive but not serving. autoheal watches health
+    # status and restarts what goes unhealthy.
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: "10"
+      AUTOHEAL_START_PERIOD: "30"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Talks to the socket and nothing else, so it gets no network at all.
+    network_mode: none
+
+networks:
+  doorrelay:
+    driver: bridge
+    # Not `internal: true` — that would block egress, and both the tunnel
+    # (outbound to Cloudflare) and trigger_door (outbound to the ESP32 on the
+    # LAN) depend on it. Privacy here comes from publishing no ports.
