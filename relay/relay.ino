@@ -47,6 +47,17 @@ const bool     ACTIVE_LOW = false;
 
 const unsigned long PULSE_MS = 2000;   // 2 second pulse
 
+// Connection maintenance. WebSocket heartbeats discard clients that vanished
+// without a TCP close. WiFi retries escalate from a normal reconnect to a full
+// radio reset. A daily refresh bounds the time spent in the rare state where
+// the driver still reports WL_CONNECTED but the network path is no longer live.
+const unsigned long WIFI_RETRY_MS = 10000;              // normal retry every 10s
+const unsigned long WIFI_RADIO_RESET_MS = 60000;        // hard recovery after 60s
+const unsigned long WIFI_REFRESH_MS = 24UL * 60UL * 60UL * 1000UL;
+const uint32_t WS_PING_INTERVAL_MS = 30000;
+const uint32_t WS_PONG_TIMEOUT_MS = 5000;
+const uint8_t WS_MISSED_PONG_LIMIT = 2;
+
 // If true: a new request while already on RESTARTS the 5s window.
 // If false: requests during an active pulse are ignored.
 const bool RETRIGGER_EXTENDS = true;
@@ -56,6 +67,11 @@ WebSocketsServer webSocket = WebSocketsServer(WS_PORT);
 
 bool relayOn = false;
 unsigned long relayOffAt = 0;
+bool webSocketRunning = false;
+bool wifiWasConnected = false;
+unsigned long wifiDownSince = 0;
+unsigned long lastWifiAttempt = 0;
+unsigned long lastWifiRefresh = 0;
 
 void relayWrite(bool on) {
   // XOR with ACTIVE_LOW so one flag handles both trigger polarities
@@ -173,22 +189,56 @@ void onWsEvent(uint8_t clientNum, WStype_t type, uint8_t* payload, size_t len) {
   }
 }
 
+void startWebSocket() {
+  if (webSocketRunning) return;
+
+  webSocket.begin();
+  webSocket.onEvent(onWsEvent);
+  webSocket.enableHeartbeat(WS_PING_INTERVAL_MS, WS_PONG_TIMEOUT_MS,
+                            WS_MISSED_PONG_LIMIT);
+  webSocketRunning = true;
+  Serial.printf("WebSocket server on ws://%s:%u/\n",
+                WiFi.localIP().toString().c_str(), WS_PORT);
+}
+
+void stopWebSocket() {
+  if (!webSocketRunning) return;
+
+  // A WiFi disconnect invalidates the underlying TCP sockets. Close both the
+  // clients and listener so they are recreated on the recovered interface.
+  webSocket.disconnect();
+  webSocket.close();
+  webSocketRunning = false;
+  for (uint8_t i = 0; i < MAX_WS_CLIENTS; i++) challenges[i].valid = false;
+}
+
+void configureAndBeginWifi() {
+  WiFi.mode(WIFI_STA);
+  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+    Serial.println("STA failed to configure static IP");
+  }
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(ssid, password);
+}
+
+void resetWifiRadio(unsigned long now) {
+  Serial.println("WiFi recovery: resetting radio and TCP sockets");
+  stopWebSocket();
+  WiFi.disconnect(true, false);   // radio off; retain saved AP credentials
+  configureAndBeginWifi();
+  wifiWasConnected = false;
+  wifiDownSince = now;
+  lastWifiAttempt = now;
+}
+
 void setup() {
   Serial.begin(115200);
 
   pinMode(RELAY_PIN, OUTPUT);
   relayWrite(false);              // force OFF at boot, before WiFi/WS come up
 
-  if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
-    Serial.println("STA failed to configure static IP");
-  }
-
-  // Keep the radio awake for the lowest possible latency on incoming connections.
-  WiFi.setSleep(false);
-  // Let the core re-associate on its own after a drop; ensureWifi() also nudges it.
-  WiFi.setAutoReconnect(true);
-
-  WiFi.begin(ssid, password);
+  configureAndBeginWifi();
 
   // Wait briefly for the first join, but never block forever. If the AP is down
   // at boot we still start the server and keep retrying from loop(). We do NOT
@@ -203,33 +253,66 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.print("\nConnected. IP: ");
     Serial.println(WiFi.localIP());
+    wifiWasConnected = true;
+    lastWifiRefresh = millis();
+    startWebSocket();
   } else {
-    Serial.println("\nNo WiFi yet; starting server, will keep retrying.");
+    Serial.println("\nNo WiFi yet; will keep retrying.");
+    wifiDownSince = millis();
   }
-
-  webSocket.begin();
-  webSocket.onEvent(onWsEvent);
-  Serial.printf("WebSocket server on ws://%s:%u/\n",
-                WiFi.localIP().toString().c_str(), WS_PORT);
 }
 
-// Non-blocking WiFi keepalive. If the link is down, nudge a reconnect every few
-// seconds. We never reboot on WiFi loss: if the AP is gone there's nothing to
-// connect to, so a healthy relay that's simply waiting beats a boot loop. Once
-// WL_CONNECTED it returns immediately and stops re-issuing begin().
+// Non-blocking connection state machine. It also rebuilds the WebSocket listener
+// after every WiFi recovery because the old TCP sockets no longer belong to a
+// usable network interface.
 void ensureWifi() {
-  static unsigned long lastAttempt = 0;
-  if (WiFi.status() == WL_CONNECTED) return;
-
   unsigned long now = millis();
-  if (lastAttempt != 0 && now - lastAttempt < 5000) return;   // throttle attempts
-  lastAttempt = now;
-  Serial.println("WiFi down; reconnecting...");
-  WiFi.begin(ssid, password);
+  bool connected = WiFi.status() == WL_CONNECTED;
+
+  if (connected) {
+    if (!wifiWasConnected) {
+      wifiWasConnected = true;
+      wifiDownSince = 0;
+      lastWifiRefresh = now;
+      Serial.printf("WiFi recovered. IP: %s, RSSI: %d dBm\n",
+                    WiFi.localIP().toString().c_str(), WiFi.RSSI());
+      startWebSocket();
+    }
+
+    // WiFi.status() is only the driver's link state, not an end-to-end health
+    // check. Refresh periodically so a falsely connected state cannot persist
+    // indefinitely. This causes a short, intentional disconnect once per day.
+    if (now - lastWifiRefresh >= WIFI_REFRESH_MS) {
+      Serial.println("Scheduled WiFi refresh");
+      resetWifiRadio(now);
+    }
+    return;
+  }
+
+  if (wifiWasConnected || wifiDownSince == 0) {
+    Serial.printf("WiFi lost (status %d); closing stale sockets\n", WiFi.status());
+    stopWebSocket();
+    wifiWasConnected = false;
+    wifiDownSince = now;
+    lastWifiAttempt = 0;          // make the first retry immediate
+  }
+
+  if (now - wifiDownSince >= WIFI_RADIO_RESET_MS) {
+    resetWifiRadio(now);
+    return;
+  }
+
+  if (lastWifiAttempt == 0 || now - lastWifiAttempt >= WIFI_RETRY_MS) {
+    lastWifiAttempt = now;
+    Serial.println("WiFi down; requesting reconnect...");
+    WiFi.reconnect();
+  }
 }
 
 void loop() {
-  webSocket.loop();               // must run every iteration; keeps sockets alive
+  if (webSocketRunning) {
+    webSocket.loop();             // keeps sockets and heartbeat processing alive
+  }
 
   ensureWifi();                   // reconnect in the background if the link dropped
 
