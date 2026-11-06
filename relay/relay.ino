@@ -18,10 +18,11 @@
 #include <WebSocketsServer.h>
 #include <esp_random.h>     // hardware RNG for unguessable nonces
 #include "mbedtls/md.h"     // HMAC-SHA256
+#include "secrets.h"        // generated from ../.env by flash.sh (gitignored)
 
 // ---------- User config ----------
-const char* ssid     = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid     = RELAY_WIFI_SSID;
+const char* password = RELAY_WIFI_PASSWORD;
 
 // Static IP (must be in your subnet, ideally outside the DHCP pool)
 IPAddress local_IP(192, 168, 0, 67);
@@ -35,8 +36,9 @@ const int      RELAY_PIN = 23;      // GPIO -> relay module trigger
 
 // Shared HMAC secret. This NEVER travels over the wire. Instead the relay
 // challenges each client with a fresh random nonce; the client must reply with
-// HMAC-SHA256(secret, nonce). Must match `secret` in config.yaml.
-const char* SHARED_SECRET = "k9$Wm2!qR7#zP4@xL8&";
+// HMAC-SHA256(secret, nonce). Comes from RELAY_SECRET in .env, which the
+// Python side reads too, so both ends share one source.
+const char* SHARED_SECRET = RELAY_SECRET;
 
 // A nonce is single-use and expires this many ms after it is issued.
 const unsigned long NONCE_TTL_MS = 30000;   // 30 seconds

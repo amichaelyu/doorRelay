@@ -21,9 +21,8 @@ trigger_word: "open"
 relay:
   host: "192.168.0.67"
   port: 81
-  # Shared HMAC secret. This is NEVER sent over the wire — it signs a fresh
-  # nonce the relay issues each time. MUST match SHARED_SECRET in relay.ino.
-  secret: "k9$Wm2!qR7#zP4@xL8&"
+  # The shared HMAC secret is RELAY_SECRET in .env (also flashed into the relay
+  # by relay/flash.sh). It is never sent over the wire; it signs a fresh nonce.
 
 # How often to check chat.db for new messages, in seconds.
 poll_interval: 1

@@ -79,8 +79,10 @@ def load_config(path):
         ),
         "host": relay.get("host", "192.168.0.67"),
         "port": int(relay.get("port", 81)),
-        # `secret` is the HMAC key (never sent); `code` kept as a fallback name.
-        "secret": str(relay.get("secret", relay.get("code", ""))),
+        # `secret` is the HMAC key (never sent). $RELAY_SECRET (from .env) wins;
+        # config `secret`/`code` remain as fallbacks.
+        "secret": os.environ.get("RELAY_SECRET")
+        or str(relay.get("secret", relay.get("code", ""))),
         "poll_interval": float(cfg.get("poll_interval", 2)),
         "reply": cfg.get("reply") or {},
         "setup": {
@@ -315,7 +317,7 @@ def import_contacts(cfg):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
-    load_dotenv(os.path.join(here, ".env"))
+    load_dotenv(os.path.join(here, "..", ".env"))  # repo-root .env
     cfg_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "config.yaml")
     cfg = load_config(cfg_path)
     log.info(

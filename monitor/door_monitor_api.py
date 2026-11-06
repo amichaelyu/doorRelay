@@ -108,7 +108,7 @@ def create_app(cfg, token):
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
-    load_dotenv(os.path.join(here, ".env"))
+    load_dotenv(os.path.join(here, "..", ".env"))  # repo-root .env
     cfg_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "config.yaml")
     cfg = door_monitor.load_config(cfg_path)
 

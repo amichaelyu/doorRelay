@@ -3,10 +3,10 @@
 #
 # Nothing is published. The API is reachable only from containers on the
 # `doorrelay` network, which is just cloudflared. The host running this must sit
-# on the relay's LAN (config.yaml relay.host, 192.168.0.67) — bridge NAT reaches
+# on the relay's LAN (monitor/config.yaml relay.host, 192.168.0.67) — bridge NAT reaches
 # it, no host networking required.
 #
-# There is no persistent state here, so no named volumes: config.yaml is a
+# There is no persistent state here, so no named volumes: monitor/config.yaml is a
 # read-only bind mount and secrets arrive through .env. Losing every container
 # on this box costs nothing but a `docker compose up`.
 
@@ -14,7 +14,7 @@ name: doorrelay
 
 services:
   api:
-    build: .
+    build: ./monitor
     image: doorrelay-api:local
     restart: unless-stopped
     env_file: .env
@@ -25,7 +25,7 @@ services:
       # published, and `doorrelay` is a private bridge.
       DOOR_API_HOST: 0.0.0.0
     volumes:
-      - ./config.yaml:/app/config.yaml:ro
+      - ./monitor/config.yaml:/app/config.yaml:ro
     networks: [doorrelay]
     labels:
       # Restarted by autoheal when the Dockerfile's healthcheck starts failing.
