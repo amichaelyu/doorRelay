@@ -13,10 +13,11 @@ enum DoorService {
     /// Public endpoint fronted by the Cloudflare Worker at door.yumichael.com.
     static let openURL = URL(string: "https://door.yumichael.com/open")!
 
-    /// Shared API token. NOTE: this ships inside the app binary — anyone who
-    /// extracts the build can open the door. Rotate DOOR_API_TOKEN (in .env)
-    /// and this constant together if it ever leaks.
-    static let token = "n6cl7tVUPLstg5CAXAA3VurjrXTAsBtO8i71-zNVhPk"
+    /// Shared API token: DOOR_API_TOKEN from the repo-root .env, copied into
+    /// Info.plist (DoorAPIToken) at build time by embed-env.sh. NOTE: it still
+    /// ships inside the app bundle — anyone who extracts the build can open the
+    /// door. If it leaks, rotate it in .env and rebuild.
+    static let token = Bundle.main.object(forInfoDictionaryKey: "DoorAPIToken") as? String ?? ""
 
     struct DoorError: LocalizedError {
         var errorDescription: String? { "Couldn't connect to door." }

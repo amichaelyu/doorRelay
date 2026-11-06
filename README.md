@@ -17,7 +17,7 @@ everything reads one `.env` in the repo root (gitignored). wrap values in single
 quotes so docker compose doesn't expand `$` in them.
 
 ```
-DOOR_API_TOKEN='...'       # docker api: token the iOS app / shortcut must send (Bearer or X-Door-Token)
+DOOR_API_TOKEN='...'       # docker api + iOS app: bearer token for /open (baked into the app at build time)
 RELAY_SECRET='...'         # docker api + mac monitor + esp32: shared HMAC key for the relay handshake
 RELAY_WIFI_SSID='...'      # esp32 only: baked in by relay/flash.sh
 RELAY_WIFI_PASSWORD='...'  # esp32 only: baked in by relay/flash.sh
@@ -62,3 +62,9 @@ to start the container on you're server, run:
 bash run.sh
 ```
 this also fetches the latest commit from the repo using jj and then starts the container with Docker
+
+## iOS app
+
+open `door/door.xcodeproj` and build. a build step (`door/embed-env.sh`) copies
+`DOOR_API_TOKEN` from `.env` into the app and widget, so the build fails without
+it. rebuild after changing the token.
